@@ -1,4 +1,4 @@
-import os
+﻿import os
 import subprocess
 import time
 import logging
@@ -15,10 +15,10 @@ log = logging.getLogger(__name__)
 
 # Critical Windows processes that must never be killed
 _CRITICAL_PROCESSES = frozenset([
-    "system", "system idle process", "smss.exe", "csrss.exe",
-    "wininit.exe", "services.exe", "lsass.exe", "svchost.exe",
-    "winlogon.exe", "dwm.exe", "explorer.exe", "taskhostw.exe",
-    "sihost.exe", "taskhost.exe", "fontdrvhost.exe",
+    "system", "system idle process", "smss", "csrss",
+    "wininit", "services", "lsass", "svchost",
+    "winlogon", "dwm", "explorer", "taskhostw",
+    "sihost", "taskhost", "fontdrvhost",
 ])
 
 
@@ -211,7 +211,7 @@ def list_processes(sort_by="cpu"):
 def kill_process(target):
     target = str(target).strip().lower()
     # Block killing critical system processes
-    clean = target.rstrip(".exe").lower()
+    clean = target.removesuffix(".exe").lower()
     if clean in _CRITICAL_PROCESSES:
         log.warning("Blocked kill of critical process: %s", target)
         return f"BLOCKED: '{target}' ek critical system process hai. Isko kill karna system crash kar sakta hai."
@@ -219,7 +219,7 @@ def kill_process(target):
     for p in psutil.process_iter(["pid", "name"]):
         try:
             name = (p.info.get("name") or "").lower()
-            name_clean = name.rstrip(".exe")
+            name_clean = name.removesuffix(".exe")
             # Skip critical processes even if matched by substring
             if name_clean in _CRITICAL_PROCESSES:
                 continue
@@ -227,7 +227,7 @@ def kill_process(target):
                 if p.info.get("pid") == int(target):
                     p.kill()
                     killed += 1
-            elif target in name or target.rstrip(".exe") in name:
+            elif target in name or target.removesuffix(".exe") in name:
                 p.kill()
                 killed += 1
         except Exception:
@@ -343,3 +343,4 @@ def shutdown_pc(mode="shutdown"):
     subprocess.run(["shutdown", flag, "/t", "60"])
     log.warning("PC shutdown/restart scheduled: mode=%s", mode)
     return f"60 second mein PC {mode} hoga. Rokna ho toh boliye 'cancel'."
+

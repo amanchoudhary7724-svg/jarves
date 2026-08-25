@@ -9,7 +9,7 @@ def _resolve_env_placeholders(obj, parent_key=""):
     """Recursively replace __ENV:VAR_NAME__ placeholders with os.environ values."""
     if isinstance(obj, str):
         if obj.startswith("__ENV:") and obj.endswith("__"):
-            var_name = obj[7:-2]
+            var_name = obj[6:-2]
             val = os.environ.get(var_name, "")
             if not val:
                 log.warning("Environment variable %s not set (referenced in config.%s)", var_name, parent_key)

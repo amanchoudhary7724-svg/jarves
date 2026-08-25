@@ -1,4 +1,4 @@
-import os
+﻿import os
 import re
 import sys
 import json
@@ -22,7 +22,7 @@ _BLOCKED_PATTERNS = re.compile(
     r"""
     (?:
         \bdel\s+/[sqaf]\b|
-        \bformat\s+[a-z]:\b|
+        \bformat\s+[a-z]:|
         \brd\s+/s\b|\brmdir\s+/s\b|
         \bnet\s+user\b|\bnet\s+localgroup\b|
         \breg\s+(?:delete|add)\b|
@@ -36,7 +36,7 @@ _BLOCKED_PATTERNS = re.compile(
         \bpython\s+-c\s+.*(?:import\s+os|import\s+subprocess|shutil\.rmtree|os\.remove)
     )
     """,
-    re.IGNORECASE,
+    re.IGNORECASE | re.VERBOSE,
 )
 
 # Shell metacharacters that enable chaining
@@ -240,3 +240,4 @@ if __name__ == "__main__":
     print(read_file(__file__, 5))
     print(write_file(os.path.join(os.environ["TEMP"], "jarvis_test.txt"), "hello"))
     print(list_files(".")[:300])
+

@@ -1,4 +1,4 @@
-import ctypes
+﻿import ctypes
 import datetime
 import os
 import subprocess
@@ -48,12 +48,12 @@ def open_app(name):
 
 
 def close_app(name):
-    name_clean = name.lower().strip().rstrip(".exe")
+    name_clean = name.lower().strip().removesuffix(".exe")
     if name_clean in _CRITICAL_PROCESSES:
         return f"BLOCKED: '{name}' ek critical system process hai. Isko band karna system crash kar sakta hai."
     names = CFG.get("executable_names", {})
     exe = names.get(name.lower().strip(), f"{name}.exe")
-    exe_clean = exe.lower().rstrip(".exe")
+    exe_clean = exe.lower().removesuffix(".exe")
     if exe_clean in _CRITICAL_PROCESSES:
         return f"BLOCKED: '{name}' maps to critical system process '{exe}'. Band nahi karunga."
     result = subprocess.run(["taskkill", "/IM", exe, "/F"], capture_output=True, text=True)
@@ -200,3 +200,4 @@ def shutdown_pc(mode="shutdown"):
 def abort_shutdown():
     subprocess.run(["shutdown", "/a"])
     return "Shutdown cancel kar diya."
+

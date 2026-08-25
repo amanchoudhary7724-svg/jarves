@@ -1,0 +1,132 @@
+{
+  "nvidia_api_key": "__ENV:NVIDIA_API_KEY__",
+  "nvidia_base_url": "https://integrate.api.nvidia.com/v1",
+  "models": {
+    "cloud_fast": "meta/llama-3.1-8b-instruct",
+    "cloud_mid": "nvidia/nemotron-3-super-120b-a12b",
+    "cloud_heavy": "nvidia/nemotron-3-ultra-550b-a55b",
+    "local_backup": "qwen2.5:1.5b"
+  },
+  "model_pool": [
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "nvidia/nemotron-3-super-120b-a12b",
+    "minimaxai/minimax-m3",
+    "nvidia/llama-3.3-nemotron-super-49b-v1",
+    "meta/llama-3.3-70b-instruct",
+    "openai/gpt-oss-120b",
+    "meta/llama-3.1-8b-instruct"
+  ],
+  "tts_voice": "hi-IN-MadhurNeural",
+  "tts_voice_en": "en-US-GuyNeural",
+  "vosk_model_path": "models/vosk-hindi-small",
+  "vosk_model_en": "models/vosk-english-small",
+  "default_language": "hi",
+  "wake_word_threshold": 0.6,
+  "assistant_name": "Jarvis",
+  "screen_reader": {
+    "enabled": true,
+    "max_chars_active": 3000,
+    "max_chars_full": 4000
+  },
+  "tts_emotion": {
+    "enabled": true,
+    "auto_detect": true
+  },
+  "email": {
+    "enabled": true,
+    "imap_server": "imap.gmail.com",
+    "imap_port": 993,
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 587,
+    "email_address": "__ENV:JARVIS_EMAIL_ADDRESS__",
+    "app_password": "__ENV:JARVIS_EMAIL_APP_PASSWORD__"
+  },
+  "calendar": {
+    "enabled": false,
+    "credentials_file": "credentials.json",
+    "token_file": "token.json",
+    "timezone": "Asia/Kolkata"
+  },
+  "youtube": {
+    "enabled": true,
+    "credentials_file": "credentials.json",
+    "token_file": "youtube_token.json",
+    "default_category": "22",
+    "default_privacy": "private",
+    "video_creation": {
+      "enabled": true,
+      "ffmpeg_path": "ffmpeg",
+      "slide_duration_min": 3,
+      "bg_color": "#1a1a2e",
+      "text_color": "#ffffff",
+      "font_size": 48
+    },
+    "thumbnail": {
+      "enabled": true,
+      "width": 1280,
+      "height": 720,
+      "font_path": "C:/Windows/Fonts/arial.ttf"
+    },
+    "analytics": {
+      "enabled": true,
+      "track_metrics": ["views", "watchTime", "averageViewDuration", "averageViewPercentage", "likes", "comments", "shares", "subscribersGained"],
+      "dimensions": ["day", "insightTrafficSourceType", "ageGroup", "gender", "country", "deviceType"],
+      "optimization": {
+        "enabled": true,
+        "auto_suggest": true,
+        "ab_test_thumbnails": false,
+        "ab_test_titles": false,
+        "competitor_analysis": false
+      }
+    }
+  },
+  "app_paths": {
+    "chrome": "chrome",
+    "google chrome": "chrome",
+    "google": "https://www.google.com",
+    "youtube": "https://www.youtube.com",
+    "whatsapp": "start whatsapp:",
+    "notepad": "notepad",
+    "calculator": "calc",
+    "paint": "mspaint",
+    "explorer": "explorer",
+    "file explorer": "explorer",
+    "cmd": "cmd",
+    "terminal": "wt",
+    "powershell": "powershell",
+    "vs code": "code",
+    "vscode": "code",
+    "visual studio code": "code",
+    "word": "start winword",
+    "excel": "start excel",
+    "spotify": "spotify",
+    "settings": "start ms-settings:",
+    "task manager": "taskmgr"
+  },
+  "executable_names": {
+    "chrome": "chrome.exe",
+    "notepad": "notepad.exe",
+    "calculator": "CalculatorApp.exe",
+    "calc": "CalculatorApp.exe",
+    "paint": "mspaint.exe",
+    "vs code": "Code.exe",
+    "vscode": "Code.exe",
+    "spotify": "Spotify.exe",
+    "word": "WINWORD.EXE",
+    "excel": "EXCEL.EXE",
+    "whatsapp": "WhatsApp.exe",
+    "telegram": "Telegram.exe"
+  },
+  "developer": {
+    "enabled": true,
+    "allow_file_write": true,
+    "allow_command_exec": false,
+    "allowed_write_roots": ["builds"],
+    "workspace": "C:/Users/soura/Documents/Default Project/jarvis",
+    "confirm_destructive": true
+  },
+  "project_builder": {
+    "enabled": true,
+    "output_root": "C:/Users/soura/Documents/Default Project/jarvis/builds"
+  }
+}

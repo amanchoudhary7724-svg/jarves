@@ -1,0 +1,38 @@
+# Core
+pyttsx3
+vosk
+pyaudio
+openwakeword
+onnxruntime
+ollama
+openai
+requests
+psutil
+pyautogui
+pillow
+pycaw
+comtypes
+wikipedia
+ddgs
+edge-tts
+pygame
+numpy
+python-dateutil
+uiautomation
+pyperclip
+pygetwindow
+
+# Google APIs (Calendar)
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+
+# Video creation
+ffmpeg-python
+
+# Optional: OCR fallback (needs Tesseract binary: winget install UB-Mannheim.TesseractOCR)
+# pytesseract
+# mss
+
+# System: ffmpeg (winget install Gyan.FFmpeg)
+# System: python-dotenv (optional, for .env file loading — built-in loader used instead)

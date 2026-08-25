@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environment
+jarvis_env/
+venv/
+.env
+
+# Credentials and tokens (sensitive)
+credentials.json
+youtube_token.json
+token.json
+*.token.json
+
+# Models (large binary files)
+models/
+
+# Build outputs
+builds/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log

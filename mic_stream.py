@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import collections
 import numpy as np
 import sounddevice as sd
@@ -110,7 +110,7 @@ class AsyncMicStream:
                         )
                         stream.start()
                         # Wait briefly to confirm the stream actually starts
-                        deadline = time.time() + 0.4
+                        deadline = time.time() + 0.1
                         started = False
                         while time.time() < deadline:
                             if not q.empty():

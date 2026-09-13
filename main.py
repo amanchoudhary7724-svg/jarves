@@ -4,10 +4,22 @@ logging.basicConfig(
     format='%(asctime)s [%(name)s] %(levelname)s: %(message)s',
     datefmt='%H:%M:%S',
 )
+# Suppress noisy third-party logs
+logging.getLogger("comtypes").setLevel(logging.WARNING)
+logging.getLogger("comtypes.client").setLevel(logging.WARNING)
+logging.getLogger("googleapiclient.discovery_cache").setLevel(logging.WARNING)
 import argparse
 import asyncio
 import os
 import sys
+
+# Fix Windows console encoding for emoji/unicode output from LLM
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(errors="replace")
+        sys.stderr.reconfigure(errors="replace")
+    except Exception:
+        pass
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -36,12 +48,13 @@ async def live_mode():
 
     agent = JarvisAgent()
     tts = StreamingTTS()
-    tts_player = StreamingTTSPlayer(tts)
+    tts_player = StreamingTTSPlayer(mic)
     agent.set_tts_player(tts_player)
 
-    # Wake word detector
+    # Wake word detector (0.4 tuned for real-mic audio; TTS tests hit ~1.0,
+    # live voice peaks ~0.45-0.6 due to room noise/distance)
     from wakeword_detector import create_wake_word_detector
-    wake_detector = create_wake_word_detector("hey_jarvis", threshold=0.5)
+    wake_detector = create_wake_word_detector("hey_jarvis", threshold=0.4)
 
     print("=" * 50)
     print("  JARVIS VOICE LIVE CONVERSATION (Hindi + English)")
@@ -49,7 +62,9 @@ async def live_mode():
     print("  Beech mein bhi bol sakte ho - main sununga")
     print("=" * 50)
 
-    mic = AsyncMicStream()
+    # Gain 10x: Bluetooth HFP mics capture very quietly (~0.4% peak even
+    # speaking loudly); digital amplification brings speech into STT range
+    mic = AsyncMicStream(gain=50.0)
 
     try:
         await mic.start_input()
@@ -61,11 +76,25 @@ async def live_mode():
 
     print("\n[JARVIS] Wake word ka intezaar... ('Hey Jarvis' bolo)")
 
+    stt_gen = None
     try:
         tts_player_task = None
+        # ONE STT generator reused across turns (avoids reloading VAD/ONNX
+        # session every turn and prevents async-generator leaks)
+        stt_gen = stt_stream(mic, lang="hi", pause_sec=1.5, normalize=True)
 
         # Main loop: wake word -> conversation turn
         while True:
+            # Drain any mic backlog (e.g. echo of Jarvis's own TTS) so stale
+            # audio doesn't false-trigger the wake word or pollute the next turn
+            try:
+                q = getattr(mic, "_input_queue", None)
+                if q is not None:
+                    while not q.empty():
+                        q.get_nowait()
+            except Exception:
+                pass
+
             # Wake word listening phase
             print("\n[JARVIS] Sun raha hoon... (wake word ka intezaar)")
             wake_detected = False
@@ -83,14 +112,18 @@ async def live_mode():
                 while len(audio_buffer) >= 2560:
                     window = bytes(audio_buffer[:2560])
                     audio_buffer = audio_buffer[2560:]
-                    if wake_detector.detect(window):
+                    score = wake_detector.predict(window)
+                    if score > 0.15:
+                        import numpy as _np
+                        peak = int(_np.abs(_np.frombuffer(window, dtype=np.int16)).max())
+                        print(f"\n  [wake] score={score:.3f} peak={peak}")
+                    if score >= 0.4:
                         wake_detected = True
                         print("\n[JARVIS] Wake word detected! Sun raha hoon...")
                         break
                 await asyncio.sleep(0.005)
 
-            # Conversation turn: run STT for one utterance
-            stt_gen = stt_stream(mic, lang="hi", pause_sec=1.5, normalize=True)
+            # Conversation turn: run STT for one utterance (reuse stt_gen)
             final_text = None
             async def collect_one_utterance():
                 nonlocal final_text
@@ -144,6 +177,12 @@ async def live_mode():
     except Exception as e:
         print(f"[ERROR] {type(e).__name__}: {e}")
     finally:
+        # Close the STT async generator cleanly
+        try:
+            if stt_gen is not None:
+                await stt_gen.aclose()
+        except Exception:
+            pass
         await mic.stop()
     return True
 
@@ -151,9 +190,8 @@ async def live_mode():
 async def _text_mode_async():
     agent = JarvisAgent()
     print("=" * 50)
-    print("  JARVIS TEXT MODE (Testing)")
-    print("  Hindi/English dono chalega")
-    print("  Commands: 'quit', 'voice' (switch to voice mode)")
+    print("  JARVIS (Hindi + English)")
+    print("  Type your message, 'voice' for mic, 'quit' to exit")
     print("=" * 50)
     while True:
         try:
@@ -168,9 +206,15 @@ async def _text_mode_async():
             await live_mode()
             continue
         lang = _detect_lang(user)
-        resp, emotion = await agent.handle(user, lang=lang)
+        try:
+            resp, emotion = await agent.handle(user, lang=lang)
+        except Exception as e:
+            resp, emotion = f"Error: {e}", "neutral"
         print(f"Jarvis: {resp} [{emotion}]")
-        _speak(resp, lang=lang, emotion=emotion)
+        try:
+            _speak(resp, lang=lang, emotion=emotion)
+        except Exception:
+            pass
 
 
 def text_mode():
@@ -184,7 +228,7 @@ async def _one_shot_async():
     agent = JarvisAgent()
     print("Listening... (10 sec)")
     try:
-        mic = AsyncMicStream()
+        mic = AsyncMicStream(gain=10.0)
         await mic.start_input()
     except RuntimeError as e:
         print(f"Microphone nahi chala: {e}")
@@ -222,7 +266,7 @@ def one_shot():
 def main():
     global TTS_ENABLED
     parser = argparse.ArgumentParser(description="JARVIS Voice Assistant")
-    parser.add_argument("--text", action="store_true", help="Text chat mode (no mic needed)")
+    parser.add_argument("--voice", action="store_true", help="Live voice mode (needs working mic)")
     parser.add_argument("--voice-once", action="store_true", help="One-shot: listen once, respond")
     parser.add_argument("--no-tts", action="store_true", help="TTS off (test logic without audio)")
     args = parser.parse_args()
@@ -230,15 +274,15 @@ def main():
     if args.no_tts:
         TTS_ENABLED = False
 
-    if args.text:
-        text_mode()
+    if args.voice:
+        ok = asyncio.run(live_mode())
+        if not ok:
+            print("\n[JARVIS] Voice mic unavailable.\n")
+            text_mode()
     elif args.voice_once:
         one_shot()
     else:
-        ok = asyncio.run(live_mode())
-        if not ok:
-            print("\n[JARVIS] Voice mic unavailable - switching to TEXT MODE.\n")
-            text_mode()
+        text_mode()
 
 
 if __name__ == "__main__":

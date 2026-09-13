@@ -1,9 +1,9 @@
 import asyncio
+import logging
 import os
 import tempfile
-import subprocess
 
-import soundfile as sf
+log = logging.getLogger(__name__)
 
 from config_loader import CFG
 
@@ -56,14 +56,9 @@ class StreamingTTS:
         if not text.strip():
             return
 
-        # Write text to temp file for Piper
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-            f.write(text)
-            text_file = f.name
-
         try:
-            # Piper CLI: piper --model <model> --config <config> --output_file <output> < text.txt
-            # For streaming, we use piper with --output_raw to stdout
+            # Piper CLI: piper --model <model> --config <config> --output_raw to stdout
+            # For streaming, we write text to stdin and read raw audio from stdout
             cmd = [
                 "piper",
                 "--model", self._get_voice_path(),
@@ -72,7 +67,6 @@ class StreamingTTS:
                 "--sentence_silence", "0.2",
             ]
 
-            # Use stdin for text input, stdout for raw audio
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdin=asyncio.subprocess.PIPE,
@@ -80,21 +74,22 @@ class StreamingTTS:
                 stderr=asyncio.subprocess.DEVNULL,
             )
 
-            # Write text to stdin
-            _, _ = await proc.communicate(input=text.encode())
+            # Write text to stdin and close it to signal piper we're done
+            proc.stdin.write(text.encode())
+            await proc.stdin.drain()
+            proc.stdin.close()
 
-            # Read stdout in chunks
-            # Piper outputs raw 16-bit PCM at 22050 Hz
+            # Read stdout in chunks — Piper outputs raw 16-bit PCM at 22050 Hz
             chunk_size = 4096  # ~93ms at 22050 Hz
             while True:
-                chunk = await proc.stdout.read(4096)
+                chunk = await asyncio.wait_for(proc.stdout.read(4096), timeout=5.0)
                 if not chunk:
                     break
                 yield chunk
 
             await proc.wait()
 
-        except Exception as e:
+        except Exception:
             # Fallback to pyttsx3 if Piper fails
             async for chunk in self._fallback_tts(text, lang):
                 yield chunk
@@ -103,13 +98,18 @@ class StreamingTTS:
         """Fallback to pyttsx3 (blocking, full utterance)."""
         try:
             import pyttsx3
+            import soundfile as sf
             engine = pyttsx3.init()
             engine.setProperty('rate', 170)
             voices = engine.getProperty('voices')
+            hindi_voice_found = False
             for v in voices:
                 if lang == "hi" and "hindi" in v.name.lower():
                     engine.setProperty('voice', v.id)
+                    hindi_voice_found = True
                     break
+            if not hindi_voice_found:
+                log.debug("Hindi voice not found, using default voice")
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
                 wav_file = f.name
             engine.save_to_file(text, wav_file)
@@ -125,7 +125,8 @@ class StreamingTTS:
             for i in range(0, len(data), chunk_size):
                 chunk = data[i:i+chunk_size].tobytes()
                 yield chunk
-        except Exception:
+        except Exception as e:
+            log.debug(f"TTS fallback error: {type(e).__name__}: {e}")
             pass
 
     async def speak(self, text: str, lang=None):
@@ -160,8 +161,9 @@ class StreamingTTSPlayer:
         self._abort.set()
         # Drain any queued audio so old speech doesn't bleed into new
         try:
-            while not self.mic_stream._output_queue.empty():
-                self.mic_stream._output_queue.get_nowait()
+            if hasattr(self.mic_stream, '_output_queue'):
+                while not self.mic_stream._output_queue.empty():
+                    self.mic_stream._output_queue.get_nowait()
         except Exception:
             pass
 
@@ -207,7 +209,10 @@ TTS_ENABLED = True
 def speak(text, lang="hi", emotion="neutral"):
     if not TTS_ENABLED or not text:
         return
-    _speak_offline(text, lang)
+    try:
+        _speak_offline(text, lang)
+    except Exception as e:
+        print(f"[TTS speak error] {e}")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,6 @@
 # Core
+fastapi
+uvicorn
 pyttsx3
 vosk
 pyaudio
@@ -17,6 +19,9 @@ ddgs
 edge-tts
 pygame
 numpy
+sounddevice
+soundfile
+librosa
 python-dateutil
 uiautomation
 pyperclip

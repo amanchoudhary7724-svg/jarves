@@ -1,4 +1,4 @@
-﻿import ctypes
+import ctypes
 import datetime
 import os
 import subprocess

@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import collections
 import numpy as np
 import sounddevice as sd
@@ -7,10 +7,11 @@ import sounddevice as sd
 class AsyncMicStream:
     """Async mic stream with callback-based I/O using sounddevice."""
 
-    def __init__(self, blocksize=4000, samplerate=16000, device=None):
+    def __init__(self, blocksize=4000, samplerate=16000, device=None, gain=1.0):
         self.blocksize = blocksize
         self.samplerate = samplerate
         self._device = device
+        self.gain = gain  # digital amplification (Bluetooth HFP mics are often very quiet)
         self._input_queue = asyncio.Queue(maxsize=64)
         self._output_queue = asyncio.Queue(maxsize=64)
         self._input_stream = None
@@ -25,12 +26,16 @@ class AsyncMicStream:
         def callback(indata, frames, time_info, status):
             if status:
                 pass  # overflow/underflow warnings
-            # Convert to int16 bytes (Vosk expects int16 PCM)
+            # Convert to int16 bytes (Vosk expects int16 PCM), apply gain with clipping
             try:
                 if self._dtype == "float32":
-                    audio = (np.frombuffer(indata, dtype=np.float32) * 32767).astype(np.int16)
+                    audio = np.frombuffer(indata, dtype=np.float32) * 32767
                 else:
-                    audio = np.frombuffer(indata, dtype=np.int16)
+                    audio = np.frombuffer(indata, dtype=np.int16).astype(np.float32)
+                if self.gain != 1.0:
+                    audio = audio * self.gain
+                    audio = np.clip(audio, -32767, 32767)
+                audio = audio.astype(np.int16)
                 self._input_queue.put_nowait(audio.tobytes())
             except asyncio.QueueFull:
                 pass  # drop frame if queue full
@@ -109,8 +114,10 @@ class AsyncMicStream:
                             callback=cb,
                         )
                         stream.start()
-                        # Wait briefly to confirm the stream actually starts
-                        deadline = time.time() + 0.1
+                        # Wait briefly to confirm the stream actually starts.
+                        # Bluetooth HFP devices can take >300ms to deliver the
+                        # first callback - too short a window misses them.
+                        deadline = time.time() + 0.4
                         started = False
                         while time.time() < deadline:
                             if not q.empty():
@@ -120,6 +127,7 @@ class AsyncMicStream:
                         stream.stop()
                         stream.close()
                         if started:
+                            print(f"[MIC] Using device {dev} ({host}) sr={sr} dtype={dtype}")
                             # Prefer 16000 if the device supports it
                             if sr == 16000:
                                 return (dev, 16000, dtype)

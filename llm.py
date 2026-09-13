@@ -31,7 +31,11 @@ def _nvidia_client():
 
 
 def nvidia_ready():
-    return bool(CFG.get("nvidia_api_key"))
+    key = CFG.get("nvidia_api_key", "")
+    # Reject placeholder / empty keys
+    if not key or key.startswith("__ENV:") or key == "__ENV:NVIDIA_API_KEY__":
+        return False
+    return True
 
 
 def has_internet(timeout=2.0):
@@ -188,40 +192,103 @@ def _try_nvidia(model, messages, tools):
         return None
 
 
+def _extract_ollama(resp):
+    """Extract content and tool_calls from Ollama ChatResponse."""
+    msg = resp.message
+    content = (msg.content or "").strip()
+    tool_calls = []
+    for tc in getattr(msg, "tool_calls", None) or []:
+        if hasattr(tc, "function"):
+            fn = tc.function
+            name = getattr(fn, "name", "")
+            args = getattr(fn, "arguments", {})
+            if isinstance(args, str):
+                args = _safe_json(args)
+            tool_calls.append({"name": name, "args": args})
+        elif isinstance(tc, dict):
+            fn = tc.get("function", {})
+            name = fn.get("name", "") if isinstance(fn, dict) else ""
+            args = fn.get("arguments", {}) if isinstance(fn, dict) else {}
+            if isinstance(args, str):
+                args = _safe_json(args)
+            tool_calls.append({"name": name, "args": args})
+    return {"content": content, "tool_calls": tool_calls}
+
+
+def _filter_tools_for_query(tools, user_text):
+    """Return a subset of tools relevant to the user's query (reduces prompt
+    size for small local models). Falls back to all tools if no match."""
+    if not tools:
+        return tools
+    t = user_text.lower()
+    # Keyword -> tool name prefix mapping for common intents
+    keyword_map = {
+        "open|kholo|chalao|launch|start": ["open_app"],
+        "close|band|shutdown|shut": ["close_app"],
+        "volume|awaz|aawaz|sound|speaker": ["set_volume", "change_volume", "get_volume"],
+        "brightness|roshni|screen": ["set_brightness", "change_brightness"],
+        "play|chalo|chalaao|song|music|video": ["youtube_play_video", "youtube_search", "play_media", "pause_media"],
+        "youtube|search|dhoondh|khoj": ["youtube_search", "web_search"],
+        "screenshot|screen capture|screen shot": ["take_screenshot"],
+        "time|waqt|samay|kitne baje": ["get_time"],
+        "date|tarikh|aaj|kal": ["get_time"],
+        "battery|charge|power": ["battery_status"],
+        "wifi|internet|network|connection": ["network_info", "diagnose_network", "wifi_diagnostics", "wifi_password", "check_local_ports", "ping_test", "ip_config"],
+        "bluetooth|bt": ["bluetooth_toggle"],
+        "email|mail|bhejo|pathao": ["send_email", "check_email"],
+        "calendar|meeting|event|schedule": ["list_calendar_events"],
+        "file|folder|directory|path": ["open_folder", "list_files", "file_info", "read_file", "write_file", "edit_file"],
+        "process|task manager|running": ["list_processes", "kill_process"],
+        "system|pc|computer|specs|info": ["system_info", "shutdown_pc", "empty_recycle_bin"],
+        "port|ports|ping|ipconfig|diagnose|diagnosis": ["diagnose_network", "check_local_ports", "ping_test", "ip_config", "wifi_diagnostics"],
+        "keyboard|type|likh do| likho": ["type_text", "press_key"],
+        "mouse|click|cursor": ["mouse_click"],
+        "clipboard|copy|paste|paste_from": ["get_clipboard", "set_clipboard"],
+        "weather|mausam|tapman": ["get_weather"],
+        "notify|notification|alert": ["send_notification"],
+        "reminder|yaad dila": ["set_reminder"],
+        "command|cmd|run|execute|terminal|powershell": ["run_command"],
+        "joke|hasi|mazaak": [],
+        "who|kaun|name|naam": [],
+    }
+    matched = set()
+    for keywords, tool_names in keyword_map.items():
+        if any(k in t for k in keywords.split("|")):
+            matched.update(tool_names)
+    if not matched:
+        return tools  # no keyword match -> send all
+    # Always include the most generic tools
+    always = {"open_app", "close_app", "web_search", "get_time", "battery_status"}
+    matched.update(always)
+    return [tool for tool in tools if tool.get("function", {}).get("name", "") in matched]
+
+
+_LOCAL_MAX_TOOLS = 30  # qwen2.5:1.5b hangs with >30 tools
+
+
 def _try_local(messages, tools):
     model = CFG["models"]["local_backup"]
-    tool_list = []
-    if tools:
-        for t in tools:
-            fn = t.get("function", {})
-            desc = fn.get("description", "")
-            params = fn.get("properties", {})
-            tool_list.append(f"- {fn.get('name', '?')}: {desc}")
-    tool_section = ""
-    if tool_list:
-        tool_section = "\n\nAvailable tools:\n" + "\n".join(tool_list)
+    tools = tools or []
+    # Get user text for tool filtering
+    user_text = ""
+    for m in reversed(messages):
+        if m.get("role") == "user":
+            user_text = m.get("content", "")
+            break
+    filtered = _filter_tools_for_query(tools, user_text)
+    # Cap at 30 tools — small models hang with too many
+    if len(filtered) > _LOCAL_MAX_TOOLS:
+        filtered = filtered[:_LOCAL_MAX_TOOLS]
     local_messages = list(messages)
-    if tool_list:
-        tool_format = """You can call tools by writing EXACTLY this format (no other format):
-<tool_call name="tool_name">{"param": "value"}</tool_call>
-
-You can call multiple tools in one response."""
-        if local_messages and local_messages[0]["role"] == "system":
-            local_messages[0] = {
-                "role": "system",
-                "content": local_messages[0]["content"] + tool_section + "\n\n" + tool_format,
-            }
-        else:
-            local_messages.insert(0, {
-                "role": "system",
-                "content": "You are Jarvis." + tool_section + "\n\n" + tool_format,
-            })
     try:
-        resp = ollama.chat(model=model, messages=local_messages)
+        kwargs = dict(model=model, messages=local_messages)
+        if filtered:
+            kwargs["tools"] = filtered
+        resp = ollama.chat(**kwargs)
+        # Check if Ollama returned tool calls natively
+        if resp.message.tool_calls:
+            return _extract_ollama(resp)
         content = (resp.message.content or "").strip()
-        if tool_list:
-            tool_calls, cleaned = _parse_tool_calls_from_text(content)
-            return {"content": cleaned, "tool_calls": tool_calls}
         return {"content": content, "tool_calls": []}
     except Exception as e:
         print(f"[LLM] Ollama fail: {type(e).__name__}: {e}")

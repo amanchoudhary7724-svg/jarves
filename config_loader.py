@@ -1,6 +1,7 @@
 import json
 import os
 import logging
+import sys
 
 log = logging.getLogger(__name__)
 
@@ -12,7 +13,7 @@ def _resolve_env_placeholders(obj, parent_key=""):
             var_name = obj[6:-2]
             val = os.environ.get(var_name, "")
             if not val:
-                log.warning("Environment variable %s not set (referenced in config.%s)", var_name, parent_key)
+                log.debug("Environment variable %s not set (referenced in config.%s)", var_name, parent_key)
             return val
         return obj
     if isinstance(obj, dict):

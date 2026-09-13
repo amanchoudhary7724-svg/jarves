@@ -41,8 +41,15 @@ def _normalize_hindi(text: str) -> str:
         "डबल क्लिक": "double click", "राईट क्लिक": "right click",
     }
     for hin, rom in phrase_map.items():
-        if hin in result.lower():
-            result = result.lower().replace(hin, rom)
+        # Match whole phrase: check if hin appears as a contiguous sequence
+        # with space boundaries or at start/end of result
+        hin_lower = hin.lower()
+        result_lower = result.lower()
+        # Use regex to match phrase with space boundaries
+        pattern = r'(^|(?<=\s))' + re.escape(hin_lower) + r'($|(?=\s))'
+        if re.search(pattern, result_lower):
+            result = result_lower.replace(hin_lower, rom).strip()
+            result = " ".join(result.split())  # normalize spaces
     return result
 
 
@@ -197,9 +204,6 @@ class StreamingSTT:
                 self._last_speech_time = None
 
         return partial if partial else None, final_text
-
-
-import numpy as np
 
 
 def resample_audio(chunk: bytes, from_sr: int, to_sr: int) -> bytes:

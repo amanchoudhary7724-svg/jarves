@@ -1,36 +1,21 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-
-# Virtual environment
-jarvis_env/
-venv/
 .env
-
-# Credentials and tokens (sensitive)
+.env.*
+!.env.example
 credentials.json
-youtube_token.json
-token.json
-*.token.json
 
-# Models (large binary files)
+jarvis_env/
+.venv/
+venv/
+
+__pycache__/
+.pytest_cache/
+node_modules/
+
 models/
-
-# Build outputs
 builds/
+test-results/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Logs
-*.log
+*.pyc
+*.db
+*.sqlite
+*.sqlite3

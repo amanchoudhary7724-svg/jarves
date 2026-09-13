@@ -16,6 +16,7 @@ from tools import video_optimizer as vo
 from tools import dev_tools as dv
 from tools import project_builder as pb
 from tools import pc_control as pc
+from tools import network_diag as nd
 
 TOOLS = [
     {
@@ -1190,6 +1191,80 @@ TOOLS = [
             },
         },
         "func": lambda: pc.empty_recycle_bin(),
+    },
+    {
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "diagnose_network",
+                "description": "Apne PC ka full network diagnosis karo - IP, gateway, WiFi signal, internet status (sirf apna system)",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+        "func": lambda: nd.diagnose_network(),
+    },
+    {
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "wifi_diagnostics",
+                "description": "Apne WiFi ka full status dikhao - SSID, signal, channel, saved profiles",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+        "func": lambda: nd.wifi_diagnostics(),
+    },
+    {
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "wifi_password",
+                "description": "Apna saved WiFi password dekho. profile: WiFi naam (jaise MyWiFi)",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"profile": {"type": "string", "description": "WiFi profile naam"}},
+                    "required": ["profile"],
+                },
+            },
+        },
+        "func": nd.wifi_password,
+    },
+    {
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "check_local_ports",
+                "description": "Sirf localhost (127.0.0.1) pe kaunse ports khule hain check karo - apna PC only",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+        "func": lambda: nd.check_local_ports(),
+    },
+    {
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "ping_test",
+                "description": "Ping test karo - sirf localhost, gateway ya 8.8.8.8 allowed. target: IP (default 127.0.0.1)",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"target": {"type": "string", "description": "Target IP (default 127.0.0.1)"}},
+                    "required": [],
+                },
+            },
+        },
+        "func": lambda target="127.0.0.1": nd.ping_test(target),
+    },
+    {
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "ip_config",
+                "description": "Full ipconfig /all output dikhao",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+        "func": lambda: nd.ip_config(),
     },
 ]
 

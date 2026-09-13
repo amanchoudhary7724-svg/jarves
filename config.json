@@ -69,8 +69,24 @@
     },
     "analytics": {
       "enabled": true,
-      "track_metrics": ["views", "watchTime", "averageViewDuration", "averageViewPercentage", "likes", "comments", "shares", "subscribersGained"],
-      "dimensions": ["day", "insightTrafficSourceType", "ageGroup", "gender", "country", "deviceType"],
+      "track_metrics": [
+        "views",
+        "watchTime",
+        "averageViewDuration",
+        "averageViewPercentage",
+        "likes",
+        "comments",
+        "shares",
+        "subscribersGained"
+      ],
+      "dimensions": [
+        "day",
+        "insightTrafficSourceType",
+        "ageGroup",
+        "gender",
+        "country",
+        "deviceType"
+      ],
       "optimization": {
         "enabled": true,
         "auto_suggest": true,
@@ -121,7 +137,14 @@
     "enabled": true,
     "allow_file_write": true,
     "allow_command_exec": false,
-    "allowed_write_roots": ["builds"],
+    "allowed_write_roots": [
+      "builds",
+      "C:/Users/soura/Documents/Default Project/jarvis/builds",
+      "C:/Users/soura/Documents/Default Project",
+      "C:/Users/soura/Desktop",
+      "C:/Users/soura/Downloads",
+      "C:/Temp"
+    ],
     "workspace": "C:/Users/soura/Documents/Default Project/jarvis",
     "confirm_destructive": true
   },

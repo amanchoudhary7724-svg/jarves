@@ -1,0 +1,12 @@
+{
+  "name": "jarvis",
+  "version": "0.1.0",
+  "description": "Jarvis UI and CLI harness",
+  "main": "index.js",
+  "scripts": {
+    "test:ui": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  }
+}

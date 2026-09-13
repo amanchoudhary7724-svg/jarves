@@ -8,17 +8,18 @@ from tools.registry import execute, get_schemas
 from tts import _detect_emotion_from_text, StreamingTTSPlayer
 
 
-def _truncate_response(text: str, lang: str, max_lines: int = 2) -> str:
-    """Truncate response to max_lines (split by newline or sentence)."""
+def _truncate_response(text: str, lang: str, max_sentences: int = 2) -> str:
+    """Truncate response to max sentences (handles single long lines too)."""
     if not text:
         return text
-    # Split by newlines first
-    lines = [l.strip() for l in text.split('\n') if l.strip()]
-    if len(lines) <= max_lines:
-        return '\n'.join(lines)
-    # If too many lines, take first max_lines and truncate
-    truncated = ' '.join(lines[:max_lines])
-    # Ensure it ends with punctuation
+    # Collapse newlines into spaces, then split by sentence boundaries
+    flat = ' '.join(l.strip() for l in text.split('\n') if l.strip())
+    # Split on Devanagari danda, '.', '!', '?' keeping the delimiter
+    parts = re.split(r'(?<=[।.!?])\s+', flat)
+    parts = [p.strip() for p in parts if p.strip()]
+    if len(parts) <= max_sentences:
+        return flat
+    truncated = ' '.join(parts[:max_sentences])
     if truncated and truncated[-1] not in '.।?!':
         truncated += '.'
     return truncated
@@ -121,6 +122,18 @@ _months_hi = ["January", "February", "March", "April", "May", "June", "July", "A
 
 
 RULES = [
+    # --- Destructive actions - FULL CONTROL (no confirm needed) ---
+    {"patterns": [r"\b(pc|computer|laptop|system)\b.*\b(restart|reboot|dobara chalao)\b",
+                 r"\b(restart|reboot)\b.*\b(karo|do)\b"],
+     "handler": lambda m: ("shutdown_pc", {"mode": "restart"})},
+    {"patterns": [r"\b(pc|computer|laptop|system)\b.*\b(shutdown|band karo)\b",
+                 r"\bshutdown\b"],
+     "handler": lambda m: ("shutdown_pc", {"mode": "shutdown"})},
+    {"patterns": [r"\b(recycle ?bin|trash|kachra ?dan)\b.*\b(khali|empty|clean|saaf)\b",
+                 r"\b(khali|empty|clean|saaf)\b.*\b(recycle ?bin|trash|kachra ?dan)\b",
+                 r".*\b(recycle ?bin|trash|kachra ?dan)\b.*\b(confirm|pukka|haan|sure)\b"],
+     "handler": lambda m: ("empty_recycle_bin", {})},
+
     # Window management
     {"patterns": [r"\b(window|tab|windo)\b.*\b(band|close)\b", r"\b(band|close)\b.*\b(window|tab)\b"],
      "handler": lambda m: ("close_window", {})},
@@ -140,9 +153,9 @@ RULES = [
     {"patterns": [r"\bclipboard\s*(?:pe|par|mein)?\s*(?:daalo|dalo|rakho|copy)\s+(?P<ct>.+)|"
                  r"\b(?:copy|likh)\s+(?P<ct2>.+?)\s+(?:ko\s+)?clipboard\b"],
      "handler": lambda m: ("clipboard_write", {"text": (m.group("ct") or m.group("ct2")).strip()})},
-    {"patterns": [r"^copy$", r"^copy karo$", r"^copy kar do$", r"\bcopy\s*\(?k?ro?\)?$"],
+    {"patterns": [r"^copy$", r"^copy karo$", r"^copy kar do$", r"\bcopy\s*(?:karo|kro)\s*$"],
      "handler": lambda m: ("press_key", {"combo": "ctrl+c"})},
-    {"patterns": [r"^paste$", r"\bpaste\s*\(?k?ro?\)?$"],
+    {"patterns": [r"^paste$", r"\bpaste\s*(?:karo|kro)\s*$"],
      "handler": lambda m: ("press_key", {"combo": "ctrl+v"})},
     {"patterns": [r"\b(save|undo|redo|select all|find|print|refresh|reload)\b"],
      "handler": lambda m: {
@@ -156,8 +169,8 @@ RULES = [
          "reload": ("press_key", {"combo": "f5"}),
      }.get(m.group(1).lower(), ("press_key", {"combo": "ctrl+s"}))},
     {"patterns": [r"\b(?:press|dabao|daba do|daba)\s+(?P<keys>[a-z0-9 +]+)",
-                 r"((?:ctrl|control|alt|shift|win|windows)(?:\s*\+\s*\w+)+)\s+(?:dabao|press|karo)"],
-     "handler": lambda m: ("press_key", {"combo": m.group("keys") or m.group(1)})},
+                 r"(?P<keys>(?:ctrl|control|alt|shift|win|windows)(?:\s*\+\s*\w+)+)\s+(?:dabao|press|karo)"],
+     "handler": lambda m: ("press_key", {"combo": m.group("keys").strip()})},
     {"patterns": [r"\btype\s+(?!karo\b|kar do\b)(?P<t>.+)", r"\b(?:likh do|likhdo)\s+(?P<t2>.+)"],
      "handler": lambda m: ("type_text", {"text": (m.group("t") or m.group("t2")).strip()})},
     {"patterns": [r"\bclipboard\s*(?:pe|par|mein)?\s*(?:padho|read|kya hai|check|dekho)\b", r"\b(copied kya|clipboard)\b\s*$"],
@@ -167,7 +180,7 @@ RULES = [
      "handler": lambda m: ("mouse_click", {"button": "right"})},
     {"patterns": [r"\bdouble click\b", r"\bdo baar click\b"],
      "handler": lambda m: ("double_click", {})},
-    {"patterns": [r"\bclick\b\s*\(?k?ro?\)?\s*"],
+    {"patterns": [r"\bclick\b\s*(?:karo|kro)?\s*"],
      "handler": lambda m: ("mouse_click", {"button": "left"})},
     {"patterns": [r"\bmouse\b.*\bmove\b.*?(\d{1,4})\D+(\d{1,4})", r"\bmove mouse\b.*?(\d{1,4})\D+(\d{1,4})"],
      "handler": lambda m: ("mouse_move", {"x": int(m.group(1)), "y": int(m.group(2))})},
@@ -197,25 +210,39 @@ RULES = [
      "handler": lambda m: (("kill_process", {"target": m.group("p") or m.group("p2")})
                            if (m.group("p") or m.group("p2")) else
                            ("list_processes", {"sort_by": "cpu"}))},
-    {"patterns": [r"\b(pc|computer|laptop|system)\b.*\b(band|shutdown|off)\b"],
-     "handler": lambda m: ("shutdown_pc", {"mode": "shutdown"})},
-    # Network
+     # Network (extended diagnostics - ONLY apna system)
     {"patterns": [r"\b(wifi|wi-?fi|network|internet)\b.*\b(kaunsa|kaun sa|naam|kya hai|status|connected|check)\b",
                  r"\bip\b.*\b(address|kya|batao|check)?\b"],
      "handler": lambda m: ("network_info", {})},
+    {"patterns": [r"\b(diagnose|diagnosis|network diagnose|full network|poora network)\b",
+                 r"\b(network|internet)\b.*\b(diagnose|check|test|health)\b"],
+     "handler": lambda m: ("diagnose_network", {})},
+    {"patterns": [r"\bwifi\b.*\b(diagnostics|detail|full|poora|signal|channel)\b",
+                 r"\b(wifi ka full|wifi detail)\b"],
+     "handler": lambda m: ("wifi_diagnostics", {})},
+    {"patterns": [r"\bwifi\b.*\b(password|pass|key)\b\s+(?P<wp>[\w\- ]{2,30})",
+                 r"\b(?P<wp2>[\w\- ]{2,30})\s+wifi.*\b(password|pass)\b"],
+     "handler": lambda m: ("wifi_password", {"profile": (m.group("wp") or m.group("wp2")).strip()})},
+    {"patterns": [r"\b(localhost|local)\b.*\b(port|ports|khule)\b",
+                 r"\b(ports?)\b.*\b(open|khule|check|scan)\b.*\blocal\b",
+                 r"\bcheck.*ports?\b"],
+     "handler": lambda m: ("check_local_ports", {})},
+    {"patterns": [r"\bping\b\s*(?P<pt>[\d\.a-zA-Z]+)?",
+                 r"\bping test\b"],
+     "handler": lambda m: ("ping_test", {"target": (m.group("pt") or "127.0.0.1").strip()})},
+    {"patterns": [r"\bipconfig\b", r"\bip config\b", r"\bnetwork config\b"],
+     "handler": lambda m: ("ip_config", {})},
     # Files
     {"patterns": [r"\b(file|folder|document|photo|video file)\b.*\b(dhund|search|find|khoj)\w*\b\s+(?P<f>.+)",
                  r"\b(?:dhundo|dhundho|khojo|find)\b\s+(?P<f2>.+?)\s+(?:file|folder|naam ka file)\b"],
      "handler": lambda m: ("search_files", {"name": (m.group("f") or m.group("f2")).strip().strip("\"'")})},
     {"patterns": [r"\b(?:folder|directory)\s+(?:banao|banado|create)\s+(?P<fp>.+)|\b(?:banao|create)\s+(?:folder|directory)\s+(?P<fp2>.+)"],
      "handler": lambda m: ("create_folder", {"path": (m.group("fp") or m.group("fp2")).strip().strip("\"'")})},
-    {"patterns": [r"\b(?:folder)\s+(?:kholo|open|khol do)\s+(?P<op>.+)|\b(?:kholo|open)\s+(?:folder)\s+(?P<op2>.+)"],
+     {"patterns": [r"\b(?:folder)\s+(?:kholo|open|khol do)\s+(?P<op>.+)|\b(?:kholo|open)\s+(?:folder)\s+(?P<op2>.+)"],
      "handler": lambda m: ("open_folder", {"path": (m.group("op") or m.group("op2")).strip().strip("\"'")})},
-    {"patterns": [r"\b(recycle ?bin|trash|kachra ?dan)\b.*\b(khali|empty|clean|saaf)\b"],
-     "handler": lambda m: ("empty_recycle_bin", {})},
     # Close app
-    {"patterns": [r"^(?P<close_app_name>[\w .\-]{2,25}?)\s+(?:ko\s+)?(?:band|bond)\s+k?ro?$",
-                 r"\b(?:band|close)\s+k?ro?\b\s+(?P<close_app_name2>[\w .\-]{2,25})$"],
+    {"patterns": [r"^(?P<close_app_name>[\w .\-]{2,25})\s+(?:ko\s+)?(?:band|bond)\s+(?:karo|kro)$",
+                 r"\b(?:band|close)\s+(?:karo|kro)\b\s+(?P<close_app_name2>[\w .\-]{2,25})$"],
      "handler": lambda m: ("close_app", {"name": (m.group("close_app_name") or m.group("close_app_name2")).strip()})},
     # YouTube
     {"patterns": [r"\b(youtube|yt)\b.*\b(search|dhundo|khojo)\b\s+(.+)", r"\b(search|dhundo)\b.*\b(youtube|yt)\b\s+(.+)"],
@@ -254,13 +281,13 @@ RULES = [
     {"patterns": [r"\b(time|samay|waqt)\b.*\b(kya|kitna|batao)\b", r"\b(abhi|right now)\b.*\b(time|samay)\b"],
      "handler": lambda m: ("get_time", {"kind": "time"})},
 
-    # Web search / Wikipedia
-    {"patterns": [r"\b(google|search|dhundho|khojo)\b\s+(?P<q>.+)",
+# Web search / Wikipedia
+    {"patterns": [r"\b(?:google|search|dhundho|khojo)\b\s+(?P<q>.+)",
                  r"\b(?:google|web|internet)\b.*\b(?:search|dhundho|khojo)\b\s+(?P<q>.+)"],
-     "handler": lambda m: ("web_search", {"query": (m.group("q") or "").strip()})},
+     "handler": lambda m: ("web_search", {"query": re.sub(r'^(?:par|pe|on|mein|google|web)\s+', '', (m.group("q") or "").strip())})},
     {"patterns": [r"\b(wikipedia|wiki)\b\s+(?P<q>.+?)(?:\s+(?:se|ke|baare|mein|batao|padho|search|about|on))\b",
                  r"\b(wikipedia|wiki)\b\s+(?P<q>.+)"],
-     "handler": lambda m: ("wikipedia_summary", {"topic": (m.group("q") or "").strip()})},
+     "handler": lambda m: ("wikipedia_summary", {"topic": re.sub(r'^(?:se|ke|baare|mein)\s+', '', (m.group("q") or "").strip())})},
 
     # Open apps
     {"patterns": [r"\b(open|kholo|chalao)\b\s+(?P<app>notepad|calculator|calc|cmd|command prompt|powershell|terminal|explorer|file explorer|browser|chrome|edge|firefox|vscode|code|word|excel|powerpoint|paint|photos|calendar|mail|task manager|taskmgr)\b",
@@ -271,21 +298,6 @@ RULES = [
     {"patterns": [r"\b(screenshot|screen shot|screen capture|print screen)\b.*\b(lo|le|karo|do)\b",
                  r"\b(lo|le|karo)\b.*\b(screenshot|screen shot)\b"],
      "handler": lambda m: ("take_screenshot", {})},
-
-    # System power (restart via shutdown_pc mode) - require explicit confirmation
-    {"patterns": [r"\b(pc|computer|laptop|system)\b.*\b(restart|reboot|dobara chalao)\b.*\b(confirm|pukka|haan|sure|sure karo)\b",
-                 r"\b(restart|reboot)\b.*\b(karo|do)\b.*\b(confirm|pukka|haan|sure)\b"],
-     "handler": lambda m: ("shutdown_pc", {"mode": "restart"})},
-    {"patterns": [r"\b(pc|computer|laptop|system)\b.*\b(shutdown|band|off)\b.*\b(confirm|pukka|haan|sure|sure karo)\b",
-                 r"\b(shutdown|band karo)\b.*\b(confirm|pukka|haan|sure)\b"],
-     "handler": lambda m: ("shutdown_pc", {"mode": "shutdown"})},
-    # Without confirmation - just inform
-    {"patterns": [r"\b(pc|computer|laptop|system)\b.*\b(restart|reboot|dobara chalao)\b",
-                 r"\b(restart|reboot)\b.*\b(karo|do)\b"],
-     "handler": lambda m: "PC restart karne ke liye 'confirm' ya 'pukka' bolo."},
-    {"patterns": [r"\b(pc|computer|laptop|system)\b.*\b(shutdown|band|off)\b",
-                 r"\b(shutdown|band karo)\b"],
-     "handler": lambda m: "PC shutdown karne ke liye 'confirm' ya 'pukka' bolo."},
 
     # Lock PC
     {"patterns": [r"\b(lock|lock screen|screen lock|pc lock)\b"],
@@ -312,10 +324,9 @@ RULES = [
     {"patterns": [r"\b(win|windows)\s*[\+\-]\s*i\b", r"\b(settings|setting)\b\s*(?:kholo|open)\b"],
      "handler": lambda m: ("press_key", {"combo": "win+i"})},
 
-    # Empty recycle bin (already there but adding more patterns)
-    {"patterns": [r"\b(kachra|trash|recycle)\s*(?:bin|dan)\s*(?:khali|empty|saaf)\b",
-                 r"\b(khali|empty|saaf)\b.*\b(kachra|trash|recycle)\b"],
-     "handler": lambda m: ("empty_recycle_bin", {})},
+    # Screenshot (short form)
+    {"patterns": [r"\b(screenshot|screen shot|screen capture|print screen)\b"],
+     "handler": lambda m: ("take_screenshot", {})},
 ]
 
 
@@ -397,15 +408,16 @@ class JarvisAgent:
         return ""
 
     def add_to_history(self, user_text, response, emotion="neutral"):
-        entry = {"user": user_text, "jarvis": response, "emotion": emotion}
-        self.history.append(entry)
+        """Store conversation in unified role/content format."""
+        self.history.append({"role": "user", "content": user_text})
+        self.history.append({"role": "assistant", "content": response})
 
     def get_recent_context(self, n=3):
         recents = list(self.history)[-n:]
         lines = []
         for entry in recents:
-            lines.append(f"User: {entry['user']}")
-            lines.append(f"Jarvis: {entry['jarvis']}")
+            role = "User" if entry.get("role") == "user" else "Jarvis"
+            lines.append(f"{role}: {entry.get('content', '')}")
         return "\n".join(lines)
 
     async def handle(self, user_text, lang=None):
@@ -442,7 +454,7 @@ class JarvisAgent:
 
         final_text = ""
         for _ in range(3):
-            resp, backend = llm.chat(messages, tools=None)
+            resp, backend = llm.chat(messages, tools=self._schemas)
             if resp["tool_calls"]:
                 for tc in resp["tool_calls"]:
                     result = execute(tc["name"], tc["args"])
@@ -456,11 +468,11 @@ class JarvisAgent:
             final_text = fallback
 
         # Enforce short responses
-        final_text = _truncate_response(final_text, lang, max_lines=2)
+        final_text = _truncate_response(final_text, lang, max_sentences=2)
 
+        # History already has the user message (appended above); just add assistant reply
         self.history.append({"role": "assistant", "content": final_text})
         emotion = _detect_emotion_from_text(final_text)
-        self.add_to_history(user_text, final_text, emotion)
         return final_text, emotion
 
     def interrupt(self):
